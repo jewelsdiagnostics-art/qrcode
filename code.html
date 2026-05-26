@@ -238,15 +238,24 @@
             border: 1px solid #ddd;
             border-radius: 5px;
         }
+        .error-message {
+            color: #d32f2f;
+            background: #ffebee;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px auto;
+            display: none;
+        }
     </style>
-<base target="_blank">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:;">
 </head>
 <body>
     <div class="container">
         <div class="header">
             <h1>QR Code Generator</h1>
         </div>
-        <input type="text" id="link" class="input-field" placeholder="Enter link">
+        <input type="text" id="link" class="input-field" placeholder="Enter link" maxlength="2048">
+        <div id="errorMessage" class="error-message"></div>
         <input type="file" id="image" class="file-input" accept="image/*">
 
         <div class="style-section">
@@ -324,7 +333,7 @@
         </button>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" integrity="sha384-df34840dfbe5950a21aead0f1cbd5f39726e0bf8d238edf81f8eade9441fa1b14e9b11390698e3688258e45dbf6cc9d4" crossorigin="anonymous"></script>
     <script>
         let currentQRCode = null;
         let currentStyle = 'standard';
@@ -342,13 +351,23 @@
         }
 
         function setPosition(pos) {
-            currentPosition = pos;
-            document.querySelectorAll('.pos-btn').forEach(btn => {
-                btn.classList.toggle('active', btn.dataset.pos === pos);
-            });
+            const validPositions = ['top-left', 'top-center', 'top-right', 'center-left', 'center', 'center-right', 'bottom-left', 'bottom-center', 'bottom-right'];
+            if (validPositions.includes(pos)) {
+                currentPosition = pos;
+                document.querySelectorAll('.pos-btn').forEach(btn => {
+                    btn.classList.toggle('active', btn.dataset.pos === pos);
+                });
+            }
         }
 
         function getPositionCoords(canvasWidth, canvasHeight, logoSize) {
+            const validPositions = ['top-left', 'top-center', 'top-right', 'center-left', 'center', 'center-right', 'bottom-left', 'bottom-center', 'bottom-right'];
+            
+            if (!validPositions.includes(currentPosition)) {
+                console.warn('Invalid position, defaulting to center');
+                currentPosition = 'center';
+            }
+            
             const positions = {
                 'top-left': { x: logoSize / 2 + 20, y: logoSize / 2 + 20 },
                 'top-center': { x: canvasWidth / 2, y: logoSize / 2 + 20 },
@@ -417,6 +436,27 @@
             return canvas;
         }
 
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        function validateURL(url) {
+            try {
+                const parsedUrl = new URL(url);
+                if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+                    return false;
+                }
+                return true;
+            } catch (e) {
+                return false;
+            }
+        }
+
         function generateQRCode() {
             const link = document.getElementById('link').value;
             const image = document.getElementById('image').files[0];
@@ -429,8 +469,31 @@
             const tolerance = parseInt(document.getElementById('tolerance').value);
 
             if (!link) {
-                alert('Please enter a link');
+                showError('Please enter a link');
                 return;
+            }
+
+            if (link.length > 2048) {
+                showError('Link is too long. Maximum length is 2048 characters.');
+                return;
+            }
+
+            if (!validateURL(link)) {
+                showError('Please enter a valid URL starting with http:// or https://');
+                return;
+            }
+
+            if (image) {
+                const maxSize = 5 * 1024 * 1024;
+                if (image.size > maxSize) {
+                    showError('Image file is too large. Maximum size is 5MB.');
+                    return;
+                }
+                const allowedTypes = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+                if (!allowedTypes.includes(image.type)) {
+                    showError('Invalid image type. Please upload PNG, JPEG, GIF, or WebP images only.');
+                    return;
+                }
             }
 
             qrContainer.innerHTML = '';
